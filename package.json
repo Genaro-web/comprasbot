@@ -1,0 +1,12 @@
+{
+  "name": "api-notificaciones-telegram",
+  "version": "1.0.0",
+  "description": "Receptor de notificaciones para Vercel",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "node-fetch": "^2.6.7"
+  }
+}
