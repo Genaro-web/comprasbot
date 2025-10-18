@@ -81,30 +81,74 @@ module.exports = async (req, res) => {
     // --- Fin Envío a Telegram ---
 
 
-    // --- 2. Disparar Señal en Firebase para OTRAS cuentas ---
+    // --- 2. Disparar RÁFAGA de Señales en Firebase para OTRAS cuentas ---
     if (admin.apps.length > 0) { // Solo intentar si el SDK inicializó bien
         try {
             const db = admin.database();
             const cuentaQueCompro = cuentaBs;
             const cuentasAActivar = TODAS_LAS_CUENTAS.filter(c => c !== cuentaQueCompro);
 
-            console.log(`[LOG] Cuenta que compró: ${cuentaQueCompro}`);
-            console.log(`[LOG] Activando señal para ${cuentasAActivar.length} otras cuentas: ${cuentasAActivar.join(', ')}`);
+            if (cuentasAActivar.length > 0) { // Solo si hay otras cuentas
+                console.log(`[LOG] Cuenta que compró: ${cuentaQueCompro}`);
+                console.log(`[LOG] Iniciando RÁFAGA de señales para ${cuentasAActivar.length} otras cuentas...`);
 
-            const firebasePromises = cuentasAActivar.map(cuenta => {
-                const signalRef = db.ref(`senales/${cuenta}`);
-                return signalRef.set({ mensaje: "activar_clic", timestamp: Date.now() });
-            });
+                // Calcular duración aleatoria entre 5000ms (5s) y 10000ms (10s)
+                const minDuracion = 5000;
+                const maxDuracion = 10000;
+                const duracionRafaga = Math.floor(Math.random() * (maxDuracion - minDuracion + 1)) + minDuracion;
+                const intervaloSenal = 500; // Enviar señal cada 500ms
+                const numSenales = Math.ceil(duracionRafaga / intervaloSenal);
+                let senalesEnviadasConExito = 0;
 
-            await Promise.all(firebasePromises);
-            firebaseTriggered = true;
-            console.log('[LOG] Señales enviadas a Firebase para otras cuentas.');
+                console.log(`[LOG]   Duración: ${duracionRafaga / 1000}s, Intervalo: ${intervaloSenal}ms, Señales a enviar: ${numSenales}`);
+
+                const sendSignalPromises = [];
+
+                for (let i = 0; i < numSenales; i++) {
+                    const delay = i * intervaloSenal;
+                    // Programar el envío de la señal con un retardo
+                    sendSignalPromises.push(
+                        new Promise(resolve => setTimeout(async () => {
+                            try {
+                                const signalTime = Date.now() + i; // Timestamp ligeramente diferente para asegurar cambio
+                                const signalData = { mensaje: "activar_clic", timestamp: signalTime };
+                                
+                                // Crea un objeto para actualizaciones múltiples (más eficiente)
+                                const updates = {};
+                                cuentasAActivar.forEach(cuenta => {
+                                    updates[`senales/${cuenta}`] = signalData;
+                                });
+
+                                // Realiza la escritura múltiple en Firebase
+                                await db.ref().update(updates);
+
+                                senalesEnviadasConExito++;
+                                console.log(`[LOG]   Ráfaga: Señal ${i + 1}/${numSenales} enviada OK.`);
+                                resolve(true); // Señal enviada
+                            } catch (signalError) {
+                                console.error(`[ERROR] Ráfaga: Error enviando señal ${i + 1}:`, signalError.message);
+                                resolve(false); // Falló el envío de esta señal
+                            }
+                        }, delay))
+                    );
+                }
+
+                // Esperar a que todas las señales programadas se envíen
+                await Promise.all(sendSignalPromises);
+                firebaseTriggered = senalesEnviadasConExito > 0;
+                console.log(`[LOG] Ráfaga de señales completada. ${senalesEnviadasConExito} sets enviados con éxito.`);
+            } else {
+                 console.log('[LOG] No hay otras cuentas para activar.');
+                 firebaseTriggered = true; // Considerar éxito si no había nada que hacer
+            }
 
         } catch (error) {
-            console.error('[ERROR] Falló el envío de señales a Firebase:', error);
+            console.error('[ERROR] Falló el proceso de ráfaga de señales a Firebase:', error);
+            firebaseTriggered = false; // Marcar como fallido si hay error general
         }
     } else {
          console.error('[ERROR] Firebase Admin SDK no está inicializado. No se enviaron señales.');
+         firebaseTriggered = false;
     }
     // --- Fin Disparo Firebase ---
 
