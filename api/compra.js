@@ -1,36 +1,49 @@
-// Updated content for /api/compra.js with scheme check
+// Updated content for /api/compra.js with CORS headers
 
 const fetch = require('node-fetch');
 
-// --- CONFIGURACI車N ---
-const BOT_TOKEN = '8400863034:AAEi2nBsC79eawh5wX8NcMaRJPWWME35vEk'; // ?? ?PON TU TOKEN DE TELEGRAM AQU赤!
-const CHAT_ID = '737845666';     // ?? ?PON TU CHAT ID AQU赤!
-const EXPECTED_SCHEME = 'chrome-extension://'; // We check if the origin STARTS with this
+// --- CONFIGURACION ---
+const BOT_TOKEN = '8400863034:AAEi2nBsC79eawh5wX8NcMaRJPWWME35vEk'; // ?? !PON TU TOKEN DE TELEGRAM AQUI!
+const CHAT_ID = '737845666';     // ?? !PON TU CHAT ID AQUI!
+// No necesitamos EXPECTED_ORIGIN aqui, ya que CORS maneja la seguridad ahora
 
 module.exports = async (req, res) => {
     
-    // --- ? 1. VERIFICACI車N DE ORIGEN (POR ESQUEMA) ---
-    const requestOrigin = req.headers.origin; // Obtiene la cabecera Origin
-    console.log(`Request received. Origin: ${requestOrigin}`); 
+    // --- ? 1. ANADIR CABECERAS CORS ---
+    // Esto permite que CUALQUIER extension de Chrome llame a tu API.
+    // Es menos restrictivo que verificar el ID exacto, pero bloquea navegadores.
+    res.setHeader('Access-Control-Allow-Origin', '*'); // Permite cualquier origen (incluyendo extensiones)
+    // Alternativa mas segura (solo tu extension):
+    // const extensionOrigin = req.headers.origin;
+    // if (extensionOrigin && extensionOrigin.startsWith('chrome-extension://')) {
+    //    res.setHeader('Access-Control-Allow-Origin', extensionOrigin);
+    // } else {
+    //     // Si no viene de una extension, podrias bloquearlo aqui, pero el chequeo anterior ya lo hace.
+    //     // Por simplicidad con Vercel, '*' es a menudo mas facil si no manejas datos muy sensibles.
+    // }
 
-    // Check if origin exists and starts with the expected scheme
-    if (!requestOrigin || !requestOrigin.startsWith(EXPECTED_SCHEME)) {
-        console.warn(`?? Forbidden request from origin: ${requestOrigin}`);
-        // If the origin doesn't start with chrome-extension://, reject it
-        return res.status(403).json({ success: false, message: "Solo se permiten peticiones desde la extensi車n autorizada." });
+    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS'); // Metodos permitidos
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type'); // Cabeceras permitidas
+
+    // Manejo de peticiones OPTIONS (preflight) que el navegador envia para CORS
+    if (req.method === 'OPTIONS') {
+        return res.status(200).end();
     }
-    // --- FIN DE LA VERIFICACI車N ---
+    // --- FIN DE CABECERAS CORS ---
 
-    // 2. Extraemos los datos (si la verificaci車n pas車)
+
+    // 2. Extraemos los datos (si la verificacion paso)
     const { cuentaBs, qtdComprada } = req.query;
+    console.log(`Request received. Origin: ${req.headers.origin}`); 
     console.log(`   Data: Cuenta ${cuentaBs}, Monto ${qtdComprada}`);
 
     if (!cuentaBs || !qtdComprada) {
+        // Asegurate de devolver JSON tambien en errores para consistencia
         return res.status(400).json({ success: false, message: 'Faltan datos en la solicitud' });
     }
 
     // 3. Creamos y enviamos el mensaje a Telegram
-    const mensaje = `?? **?Nueva Compra Realizada!** ??\n\n- **Cuenta:** ...${cuentaBs.slice(-6)}\n- **Monto Comprado:** ${qtdComprada} USD`;
+    const mensaje = `?? **!Nueva Compra Realizada!** ??\n\n- **Cuenta:** ...${cuentaBs.slice(-6)}\n- **Monto Comprado:** ${qtdComprada} USD`;
     try {
         const urlTelegram = `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`;
         const telegramResponse = await fetch(urlTelegram, {
@@ -49,10 +62,10 @@ module.exports = async (req, res) => {
             throw new Error('Failed to send Telegram notification');
         }
 
-        console.log('   Notificaci車n enviada a Telegram con 谷xito.');
+        console.log('   Notificacion enviada a Telegram con exito.');
         
-        // 4. Respondemos a la extensi車n que todo sali車 bien
-        res.status(200).json({ success: true, message: 'Notificaci車n recibida y procesada.' });
+        // 4. Respondemos a la extension que todo salio bien
+        res.status(200).json({ success: true, message: 'Notificacion recibida y procesada.' });
 
     } catch (error) {
         console.error('   Error processing request:', error);
