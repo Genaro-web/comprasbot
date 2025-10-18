@@ -1,4 +1,4 @@
-// REVISADO /api/compra.js con más logging para depuración
+// CORREGIDO /api/compra.js ENVIANDO TEXTO PLANO
 
 const fetch = require('node-fetch');
 
@@ -38,15 +38,17 @@ module.exports = async (req, res) => {
     // --- Fin Extracción ---
 
     // --- Envío a Telegram ---
+    // Mensaje sin formato Markdown
     const mensaje = `🎉 ¡Nueva Compra Realizada! 🎉\n\n- Cuenta: ...${cuentaBs.slice(-6)}\n- Monto Comprado: ${qtdComprada} USD`;
+    
     const urlTelegram = `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`;
     const telegramPayload = {
         chat_id: CHAT_ID,
-        text: mensaje,
-        parse_mode: 'Markdown'
+        text: mensaje
+        // Sin parse_mode, Telegram lo tratará como texto plano
     };
 
-    console.log(`[LOG] Preparando envío a Telegram: ${urlTelegram}`);
+    console.log(`[LOG] Preparando envío a Telegram (texto plano): ${urlTelegram}`);
     console.log(`[LOG] Payload para Telegram: ${JSON.stringify(telegramPayload)}`);
 
     try {
@@ -56,27 +58,20 @@ module.exports = async (req, res) => {
             body: JSON.stringify(telegramPayload)
         });
 
-        // *** Logging Detallado de la Respuesta de Telegram ***
         const responseStatus = telegramResponse.status;
-        const responseBodyText = await telegramResponse.text(); // Leemos el cuerpo como texto
+        const responseBodyText = await telegramResponse.text(); 
         console.log(`[LOG] Respuesta de Telegram - Status: ${responseStatus}`);
         console.log(`[LOG] Respuesta de Telegram - Body: ${responseBodyText}`);
 
-        // Verificamos si la respuesta fue OK (status 200-299)
-        if (!telegramResponse.ok) { // telegramResponse.ok verifica si el status está en el rango 200-299
-            // Si el status NO es OK, lanzamos un error con más detalles
+        if (!telegramResponse.ok) { 
             console.error(`[ERROR] Falló el envío a Telegram. Status: ${responseStatus}, Body: ${responseBodyText}`);
             throw new Error(`Telegram API responded with status ${responseStatus}: ${responseBodyText}`);
         }
-
-        // Si llegamos aquí, la API de Telegram devolvió un status 2xx (éxito)
-        console.log('[LOG] Notificación enviada a Telegram (Status 2xx recibido).');
         
-        // Respondemos éxito a la extensión
+        console.log('[LOG] Notificación enviada a Telegram (Status 2xx recibido).');
         res.status(200).json({ success: true, message: 'Notificación recibida y procesada.' });
 
     } catch (error) {
-        // Capturamos cualquier error (de red o el que lanzamos arriba)
         console.error('[ERROR] Error durante el envío a Telegram o procesamiento:', error);
         res.status(500).json({ success: false, message: `Error interno del servidor: ${error.message}` });
     }
