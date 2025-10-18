@@ -9,7 +9,7 @@ const CHAT_ID = '737845666';           // 👈 Tu Chat ID
 const EXPECTED_SCHEME = 'chrome-extension://';
 
 // Lista de todas las cuentas (DEBE coincidir con background.js)
-const TODAS_LAS_CUENTAS = ['438797', '361275', '013286', '063191', '037647', '256798', '066879', '046998', '054881', '054569', '183117', '055097'];
+const TODAS_LAS_CUENTAS = ['438797', '361275', '013286', '063191', '037647', '256798', '066879', '046998', '054881', '054569', '183117'];
 
 // --- Inicializar Firebase Admin SDK ---
 // Hacemos esto UNA SOLA VEZ fuera del handler para eficiencia
