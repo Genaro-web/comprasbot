@@ -38,7 +38,7 @@ module.exports = async (req, res) => {
     // --- Fin Extracción ---
 
     // --- Envío a Telegram ---
-    const mensaje = `🎉 **¡Nueva Compra Realizada!** 🎉\n\n- **Cuenta:** ...${cuentaBs.slice(-6)}\n- **Monto Comprado:** ${qtdComprada} USD`;
+    const mensaje = `🎉 ¡Nueva Compra Realizada! 🎉\n\n- Cuenta: ...${cuentaBs.slice(-6)}\n- Monto Comprado: ${qtdComprada} USD`;
     const urlTelegram = `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`;
     const telegramPayload = {
         chat_id: CHAT_ID,
