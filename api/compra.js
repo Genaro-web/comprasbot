@@ -93,7 +93,7 @@ module.exports = async (req, res) => {
                 console.log(`[LOG] Iniciando RÁFAGA de señales para ${cuentasAActivar.length} otras cuentas...`);
 
                 // Calcular duración aleatoria entre 5000ms (5s) y 10000ms (10s)
-                const minDuracion = 5000;
+                const minDuracion = 10000;
                 const maxDuracion = 10000;
                 const duracionRafaga = Math.floor(Math.random() * (maxDuracion - minDuracion + 1)) + minDuracion;
                 const intervaloSenal = 500; // Enviar señal cada 500ms
