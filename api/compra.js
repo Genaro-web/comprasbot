@@ -1,18 +1,15 @@
-// ACTUALIZADO /api/compra.js para escribir en Firebase
+// ACTUALIZADO /api/compra.js con Notificaciones de Inicio/Fin de Ráfaga
 
 const fetch = require('node-fetch');
 const admin = require('firebase-admin');
 
 // --- CONFIGURACIÓN ---
-const BOT_TOKEN = '8400863034:AAEi2nBsC79eawh5wX8NcMaRJPWWME35vEk'; // 👈 ¡TU NUEVO TOKEN DE TELEGRAM!
+const BOT_TOKEN = 'YOUR_NEW_BOT_TOKEN'; // 👈 ¡TU NUEVO TOKEN DE TELEGRAM!
 const CHAT_ID = '737845666';           // 👈 Tu Chat ID
 const EXPECTED_SCHEME = 'chrome-extension://';
-
-// Lista de todas las cuentas (DEBE coincidir con background.js)
-const TODAS_LAS_CUENTAS = ['438797', '361275', '013286', '063191', '037647', '256798', '066879', '046998', '054881', '054569', '183117'];
+const TODAS_LAS_CUENTAS = ['438797', '361275', '013286', '063191', '037647', '256798', '066879', '046998', '054881', '054569', '183117', '055097']; // Debe coincidir con background.js
 
 // --- Inicializar Firebase Admin SDK ---
-// Hacemos esto UNA SOLA VEZ fuera del handler para eficiencia
 if (!admin.apps.length) {
   try {
     const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY);
@@ -21,16 +18,43 @@ if (!admin.apps.length) {
       databaseURL: process.env.FIREBASE_DATABASE_URL
     });
     console.log('[LOG] Firebase Admin SDK inicializado.');
-  } catch (e) {
-    console.error('[ERROR] Falló la inicialización de Firebase Admin SDK:', e);
-    // Si falla la inicialización, las escrituras a Firebase no funcionarán.
-  }
+  } catch (e) { console.error('[ERROR] Falló la inicialización de Firebase Admin SDK:', e); }
 }
 // ------------------------------------
 
+// --- Función Auxiliar para Enviar a Telegram ---
+async function sendTelegramMessage(text) {
+  if (!BOT_TOKEN || !CHAT_ID) {
+    console.warn('[WARN] BOT_TOKEN o CHAT_ID no configurados. No se puede enviar a Telegram.');
+    return false;
+  }
+  const urlTelegram = `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`;
+  const telegramPayload = { chat_id: CHAT_ID, text: text }; // Sin parse_mode
+
+  try {
+    console.log(`[LOG] Enviando a Telegram: "${text}"`);
+    const response = await fetch(urlTelegram, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(telegramPayload)
+    });
+    const responseBody = await response.text();
+    if (!response.ok) {
+      throw new Error(`Status ${response.status}: ${responseBody}`);
+    }
+    console.log('[LOG] Mensaje enviado a Telegram.');
+    return true;
+  } catch (error) {
+    console.error('[ERROR] Falló el envío a Telegram:', error.message);
+    return false;
+  }
+}
+// ------------------------------------------
+
+
 module.exports = async (req, res) => {
     
-    // --- Cabeceras CORS y Verificación de Origin (como antes) ---
+    // --- Cabeceras CORS y Verificación de Origin ---
     const requestOrigin = req.headers.origin;
     res.setHeader('Access-Control-Allow-Origin', requestOrigin && requestOrigin.startsWith(EXPECTED_SCHEME) ? requestOrigin : '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS'); 
@@ -51,124 +75,101 @@ module.exports = async (req, res) => {
     }
     // --- Fin Extracción ---
 
-    let telegramSent = false;
-    let firebaseTriggered = false;
+    let initialTelegramSent = false;
+    let firebaseBurstStarted = false;
+    let firebaseBurstFinished = false;
+    let finalTelegramSent = false;
+    let successfulSignals = 0;
 
-    // --- 1. Envío a Telegram (Intentar primero) ---
-    try {
-        const mensaje = `✅ Compra Cliente: ...${cuentaBs.slice(-6)} (${qtdComprada} USD)`; // Mensaje más corto
-        const urlTelegram = `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`;
-        const telegramPayload = { chat_id: CHAT_ID, text: mensaje }; // Texto plano
-
-        console.log(`[LOG] Enviando a Telegram...`);
-        const telegramResponse = await fetch(urlTelegram, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(telegramPayload)
-        });
-        const tgResponseBody = await telegramResponse.text(); // Leer siempre el cuerpo
-        console.log(`[LOG] Telegram Response - Status: ${telegramResponse.status}, Body: ${tgResponseBody}`);
-        if (!telegramResponse.ok) {
-            throw new Error(`Telegram API failed (${telegramResponse.status}): ${tgResponseBody}`);
-        }
-        telegramSent = true;
-        console.log('[LOG] Notificación enviada a Telegram.');
-
-    } catch (error) {
-        console.error('[ERROR] Falló el envío a Telegram:', error);
-        // NO detenemos el proceso aquí, aún intentaremos activar Firebase
-    }
-    // --- Fin Envío a Telegram ---
+    // --- 1. Notificación INICIAL de Compra a Telegram ---
+    const compraMsg = `✅ Compra Cliente: ...${cuentaBs.slice(-6)} (${qtdComprada} USD)`;
+    initialTelegramSent = await sendTelegramMessage(compraMsg); // Usamos la función auxiliar
+    // --- Fin Notificación Inicial ---
 
 
-    // --- 2. Disparar RÁFAGA de Señales en Firebase para OTRAS cuentas ---
-    if (admin.apps.length > 0) { // Solo intentar si el SDK inicializó bien
+    // --- 2. Disparar RÁFAGA de Señales en Firebase ---
+    if (admin.apps.length > 0) { 
         try {
             const db = admin.database();
             const cuentaQueCompro = cuentaBs;
             const cuentasAActivar = TODAS_LAS_CUENTAS.filter(c => c !== cuentaQueCompro);
 
-            if (cuentasAActivar.length > 0) { // Solo si hay otras cuentas
-                console.log(`[LOG] Cuenta que compró: ${cuentaQueCompro}`);
-                console.log(`[LOG] Iniciando RÁFAGA de señales para ${cuentasAActivar.length} otras cuentas...`);
+            if (cuentasAActivar.length > 0) {
+                firebaseBurstStarted = true; // Marcamos que la ráfaga va a empezar
+                const startMsg = `🚀 Iniciando ráfaga de señales para ${cuentasAActivar.length} cuentas (causada por ...${cuentaQueCompro.slice(-6)}).`;
+                await sendTelegramMessage(startMsg); // *** Notifica Inicio de Ráfaga ***
 
-                // Calcular duración aleatoria entre 5000ms (5s) y 10000ms (10s)
-                const minDuracion = 10000;
+                const minDuracion = 5000;
                 const maxDuracion = 10000;
                 const duracionRafaga = Math.floor(Math.random() * (maxDuracion - minDuracion + 1)) + minDuracion;
-                const intervaloSenal = 500; // Enviar señal cada 500ms
+                const intervaloSenal = 500; 
                 const numSenales = Math.ceil(duracionRafaga / intervaloSenal);
-                let senalesEnviadasConExito = 0;
-
-                console.log(`[LOG]   Duración: ${duracionRafaga / 1000}s, Intervalo: ${intervaloSenal}ms, Señales a enviar: ${numSenales}`);
+                
+                console.log(`[LOG] Ráfaga: Duración ${duracionRafaga/1000}s, ${numSenales} señales para ${cuentasAActivar.length} cuentas.`);
 
                 const sendSignalPromises = [];
-
                 for (let i = 0; i < numSenales; i++) {
                     const delay = i * intervaloSenal;
-                    // Programar el envío de la señal con un retardo
                     sendSignalPromises.push(
                         new Promise(resolve => setTimeout(async () => {
                             try {
-                                const signalTime = Date.now() + i; // Timestamp ligeramente diferente para asegurar cambio
+                                const signalTime = Date.now() + i; 
                                 const signalData = { mensaje: "activar_clic", timestamp: signalTime };
-                                
-                                // Crea un objeto para actualizaciones múltiples (más eficiente)
                                 const updates = {};
-                                cuentasAActivar.forEach(cuenta => {
-                                    updates[`senales/${cuenta}`] = signalData;
-                                });
-
-                                // Realiza la escritura múltiple en Firebase
+                                cuentasAActivar.forEach(cuenta => { updates[`senales/${cuenta}`] = signalData; });
                                 await db.ref().update(updates);
-
-                                senalesEnviadasConExito++;
+                                successfulSignals++; // Contamos éxito solo aquí
                                 console.log(`[LOG]   Ráfaga: Señal ${i + 1}/${numSenales} enviada OK.`);
-                                resolve(true); // Señal enviada
+                                resolve(true); 
                             } catch (signalError) {
                                 console.error(`[ERROR] Ráfaga: Error enviando señal ${i + 1}:`, signalError.message);
-                                resolve(false); // Falló el envío de esta señal
+                                resolve(false); 
                             }
                         }, delay))
                     );
                 }
 
-                // Esperar a que todas las señales programadas se envíen
                 await Promise.all(sendSignalPromises);
-                firebaseTriggered = senalesEnviadasConExito > 0;
-                console.log(`[LOG] Ráfaga de señales completada. ${senalesEnviadasConExito} sets enviados con éxito.`);
+                firebaseBurstFinished = true; // Marcamos que la ráfaga terminó
+                const endMsg = `🏁 Ráfaga completada. ${successfulSignals} sets de señales enviados con éxito.`;
+                await sendTelegramMessage(endMsg); // *** Notifica Fin de Ráfaga ***
+                finalTelegramSent = true; // Marcamos que se envió el mensaje final
+                console.log(`[LOG] Ráfaga de señales completada. ${successfulSignals} sets enviados.`);
+
             } else {
                  console.log('[LOG] No hay otras cuentas para activar.');
-                 firebaseTriggered = true; // Considerar éxito si no había nada que hacer
+                 firebaseBurstStarted = true; // No hay ráfaga, pero el proceso continúa
+                 firebaseBurstFinished = true; // Se considera completado
             }
-
         } catch (error) {
             console.error('[ERROR] Falló el proceso de ráfaga de señales a Firebase:', error);
-            firebaseTriggered = false; // Marcar como fallido si hay error general
+            firebaseBurstFinished = false; // Marcar como fallido si hay error general
+             // Intentar notificar error si es posible
+            await sendTelegramMessage(`⚠️ Error al procesar ráfaga Firebase: ${error.message}`);
+            finalTelegramSent = true;
         }
     } else {
          console.error('[ERROR] Firebase Admin SDK no está inicializado. No se enviaron señales.');
-         firebaseTriggered = false;
+         firebaseBurstFinished = false;
+         await sendTelegramMessage(`⚠️ Error crítico: Firebase Admin SDK no inicializado en el servidor.`);
+         finalTelegramSent = true;
     }
     // --- Fin Disparo Firebase ---
 
-    // --- Respuesta Final ---
-    // Respondemos éxito general si al menos Telegram o Firebase funcionó (o ambos).
-    // Podrías ajustar esta lógica si necesitas más detalle en la respuesta.
-    if (telegramSent || firebaseTriggered) {
+    // --- Respuesta Final a la extensión original ---
+    if (firebaseBurstFinished) { // Si la ráfaga (o la ausencia de ella) terminó bien
         res.status(200).json({ 
             success: true, 
             message: 'Proceso completado.', 
-            telegram: telegramSent ? 'OK' : 'Failed', 
-            firebase_triggers: firebaseTriggered ? `OK (${TODAS_LAS_CUENTAS.length - 1} signals)` : 'Failed' 
+            initial_telegram: initialTelegramSent ? 'OK' : 'Failed', 
+            firebase_burst: firebaseBurstStarted ? `OK (${successfulSignals} signals sent)` : 'N/A' 
         });
-    } else {
-        // Si ambos fallaron
+    } else { // Si algo falló en la ráfaga
         res.status(500).json({ 
             success: false, 
-            message: 'Fallaron tanto Telegram como Firebase.', 
-            telegram: 'Failed', 
-            firebase_triggers: 'Failed' 
+            message: 'Falló el proceso de ráfaga de Firebase.', 
+            initial_telegram: initialTelegramSent ? 'OK' : 'Failed',
+            firebase_burst: 'Failed' 
         });
     }
 };
