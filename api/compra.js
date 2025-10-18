@@ -1,31 +1,39 @@
-// Este es el contenido para el archivo /api/compra.js
+// Updated content for /api/compra.js with scheme check
 
-// Importamos 'node-fetch' para hacer la llamada a la API de Telegram
 const fetch = require('node-fetch');
 
-// 隆IMPORTANTE! Reemplaza estos valores con los tuyos
-const BOT_TOKEN = '8400863034:AAEi2nBsC79eawh5wX8NcMaRJPWWME35vEk'; // El token de tu bot de Telegram
-const CHAT_ID = '737845666'; // Tu ID de chat de Telegram
+// --- CONFIGURACIóN ---
+const BOT_TOKEN = '8400863034:AAEi2nBsC79eawh5wX8NcMaRJPWWME35vEk'; // ?? ?PON TU TOKEN DE TELEGRAM AQUí!
+const CHAT_ID = '737845666';     // ?? ?PON TU CHAT ID AQUí!
+const EXPECTED_SCHEME = 'chrome-extension://'; // We check if the origin STARTS with this
 
 module.exports = async (req, res) => {
-    // 1. Extraemos los datos que la extensi贸n nos env铆a en la URL
+    
+    // --- ? 1. VERIFICACIóN DE ORIGEN (POR ESQUEMA) ---
+    const requestOrigin = req.headers.origin; // Obtiene la cabecera Origin
+    console.log(`Request received. Origin: ${requestOrigin}`); 
+
+    // Check if origin exists and starts with the expected scheme
+    if (!requestOrigin || !requestOrigin.startsWith(EXPECTED_SCHEME)) {
+        console.warn(`?? Forbidden request from origin: ${requestOrigin}`);
+        // If the origin doesn't start with chrome-extension://, reject it
+        return res.status(403).json({ success: false, message: "Solo se permiten peticiones desde la extensión autorizada." });
+    }
+    // --- FIN DE LA VERIFICACIóN ---
+
+    // 2. Extraemos los datos (si la verificación pasó)
     const { cuentaBs, qtdComprada } = req.query;
+    console.log(`   Data: Cuenta ${cuentaBs}, Monto ${qtdComprada}`);
 
-    console.log(`Notificaci贸n recibida: Cuenta ${cuentaBs}, Monto ${qtdComprada}`);
-
-    // Verificamos que los datos llegaron
     if (!cuentaBs || !qtdComprada) {
-        return res.status(400).send('Faltan datos en la solicitud');
+        return res.status(400).json({ success: false, message: 'Faltan datos en la solicitud' });
     }
 
-    // 2. Creamos el mensaje que queremos recibir
-    const mensaje = `馃帀 **隆Nueva Compra Realizada!** 馃帀\n\n- **Cuenta:** ...${cuentaBs.slice(-6)}\n- **Monto Comprado:** ${qtdComprada} USD`;
-
-    // 3. Enviamos el mensaje a nuestro chat de Telegram
+    // 3. Creamos y enviamos el mensaje a Telegram
+    const mensaje = `?? **?Nueva Compra Realizada!** ??\n\n- **Cuenta:** ...${cuentaBs.slice(-6)}\n- **Monto Comprado:** ${qtdComprada} USD`;
     try {
         const urlTelegram = `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`;
-        
-        await fetch(urlTelegram, {
+        const telegramResponse = await fetch(urlTelegram, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -35,13 +43,19 @@ module.exports = async (req, res) => {
             })
         });
 
-        console.log('Notificaci贸n enviada a Telegram con 茅xito.');
+        if (!telegramResponse.ok) {
+            const errorBody = await telegramResponse.text();
+            console.error(`Error sending to Telegram: ${telegramResponse.status} ${errorBody}`);
+            throw new Error('Failed to send Telegram notification');
+        }
+
+        console.log('   Notificación enviada a Telegram con éxito.');
         
-        // 4. Respondemos a la extensi贸n que todo sali贸 bien
-        res.status(200).send('Notificaci贸n recibida y procesada.');
+        // 4. Respondemos a la extensión que todo salió bien
+        res.status(200).json({ success: true, message: 'Notificación recibida y procesada.' });
 
     } catch (error) {
-        console.error('Error al enviar la notificaci贸n a Telegram:', error);
-        res.status(500).send('Error interno del servidor.');
+        console.error('   Error processing request:', error);
+        res.status(500).json({ success: false, message: 'Error interno del servidor.' });
     }
 };
