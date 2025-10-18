@@ -4,7 +4,7 @@ const fetch = require('node-fetch');
 const admin = require('firebase-admin');
 
 // --- CONFIGURACIÓN ---
-const BOT_TOKEN = 'YOUR_NEW_BOT_TOKEN'; // 👈 ¡TU NUEVO TOKEN DE TELEGRAM!
+const BOT_TOKEN = '8400863034:AAEi2nBsC79eawh5wX8NcMaRJPWWME35vEk'; // 👈 ¡TU NUEVO TOKEN DE TELEGRAM!
 const CHAT_ID = '737845666';           // 👈 Tu Chat ID
 const EXPECTED_SCHEME = 'chrome-extension://';
 
