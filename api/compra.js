@@ -54,18 +54,25 @@ async function sendTelegramMessage(text) {
 
 module.exports = async (req, res) => {
     
-    // --- Cabeceras CORS y Verificación de Origin ---
-    const requestOrigin = req.headers.origin;
-    res.setHeader('Access-Control-Allow-Origin', requestOrigin && requestOrigin.startsWith(EXPECTED_SCHEME) ? requestOrigin : '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS'); 
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type'); 
-    if (req.method === 'OPTIONS') { return res.status(200).end(); }
-    console.log(`[LOG] Request received. Origin: ${requestOrigin}`); 
-    if (!requestOrigin || !requestOrigin.startsWith(EXPECTED_SCHEME)) {
-        console.warn(`[WARN] Forbidden request from non-extension origin: ${requestOrigin}`);
-        return res.status(403).json({ success: false, message: "Solo se permiten peticiones desde la extensión autorizada." });
+    // --- Cabeceras CORS (Abierto para TODOS los orígenes) ---
+
+    // ¡ADVERTENCIA! Esto permite que CUALQUIER sitio web envíe peticiones a tu API.
+    res.setHeader('Access-Control-Allow-Origin', '*'); 
+
+    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS'); // Métodos permitidos
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type'); // Cabeceras permitidas
+
+    // El navegador siempre envía una petición OPTIONS primero ("preflight").
+    // Debemos responder OK a esta petición para que permita la petición GET real.
+    if (req.method === 'OPTIONS') {
+       return res.status(200).end();
     }
-    // --- Fin Verificaciones ---
+
+// Eliminamos el bloqueo de seguridad que devolvía 403.
+// Ahora todas las peticiones (que no sean OPTIONS) continuarán.
+console.log(`[LOG] Request received. Origin: ${req.headers.origin || 'Unknown'}`); 
+
+// --- Fin Verificaciones ---
 
     // --- Extracción de Datos ---
     const { cuentaBs, qtdComprada } = req.query;
