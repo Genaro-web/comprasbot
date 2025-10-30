@@ -99,8 +99,8 @@ module.exports = async (req, res) => {
                 const startMsg = `🚀 Iniciando ráfaga de señales para ${cuentasAActivar.length} cuentas (causada por ...${cuentaQueCompro.slice(-6)}).`;
                 await sendTelegramMessage(startMsg); // *** Notifica Inicio de Ráfaga ***
 
-                const minDuracion = 5000;
-                const maxDuracion = 10000;
+                const minDuracion = 1000;
+                const maxDuracion = 1000;
                 const duracionRafaga = Math.floor(Math.random() * (maxDuracion - minDuracion + 1)) + minDuracion;
                 const intervaloSenal = 500; 
                 const numSenales = Math.ceil(duracionRafaga / intervaloSenal);
